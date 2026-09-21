@@ -5,9 +5,8 @@ import os
 
 
 # =========================================================
-# 1. SAHIFA SOZLAMALARI
+# PAGE CONFIG
 # =========================================================
-
 st.set_page_config(
     page_title="Valyuta Risk Dashboard",
     page_icon="💱",
@@ -17,82 +16,35 @@ st.set_page_config(
 
 
 # =========================================================
-# 2. PROFESSIONAL CSS DIZAYN
+# CSS
 # =========================================================
+st.markdown(
+    """
+    <style>
 
-st.markdown("""
-<style>
-
-    /* Umumiy fon */
     .stApp {
         background-color: #f4f6f9;
     }
 
-    /* Asosiy sarlavha */
     .main-title {
-        font-size: 34px;
+        font-size: 32px;
         font-weight: 700;
-        color: #172033;
-        margin-bottom: 0px;
+        margin-bottom: 5px;
     }
 
-    .subtitle {
+    .sub-title {
         color: #6b7280;
         font-size: 15px;
-        margin-top: 4px;
         margin-bottom: 25px;
     }
 
-    /* KPI karta */
-    .kpi-card {
-        background: white;
-        padding: 18px 20px;
-        border-radius: 14px;
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-        min-height: 115px;
-    }
-
-    .kpi-title {
-        color: #6b7280;
-        font-size: 13px;
-        font-weight: 500;
-        margin-bottom: 8px;
-    }
-
-    .kpi-value {
-        color: #172033;
-        font-size: 25px;
-        font-weight: 700;
-    }
-
-    .kpi-small {
-        color: #6b7280;
-        font-size: 12px;
-        margin-top: 5px;
-    }
-
-    /* Section title */
     .section-title {
-        font-size: 21px;
-        font-weight: 650;
-        color: #172033;
-        margin-top: 25px;
-        margin-bottom: 10px;
-    }
-
-    /* Status */
-    .positive {
-        color: #059669;
+        font-size: 22px;
         font-weight: 700;
+        margin-top: 30px;
+        margin-bottom: 15px;
     }
 
-    .negative {
-        color: #dc2626;
-        font-weight: 700;
-    }
-
-    /* Sidebar */
     section[data-testid="stSidebar"] {
         background-color: #172033;
     }
@@ -101,651 +53,1067 @@ st.markdown("""
         color: white !important;
     }
 
-</style>
-""", unsafe_allow_html=True)
+    div[data-testid="stMetric"] {
+        background-color: white;
+        border-radius: 14px;
+        padding: 18px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        border: 1px solid #e5e7eb;
+    }
+
+    div[data-testid="stMetricLabel"] {
+        font-size: 14px;
+    }
+
+    div[data-testid="stMetricValue"] {
+        font-size: 25px;
+        font-weight: 700;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # =========================================================
-# 3. EXCEL FAYL
+# FILE PATH
 # =========================================================
-
-file_path = os.path.join(
-    os.path.dirname(__file__),
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FILE_PATH = os.path.join(
+    BASE_DIR,
     "Valyuta.xlsx"
 )
 
-try:
-    df = pd.read_excel(file_path)
-
-except Exception as e:
-    st.error(f"Excel faylni yuklashda xatolik: {e}")
-    st.stop()
-
 
 # =========================================================
-# 4. USTUN NOMLARINI TOZALASH
+# LOAD EXCEL
 # =========================================================
+@st.cache_data
+def load_data():
 
-df.columns = (
-    df.columns
-    .astype(str)
-    .str.replace("\n", " ", regex=False)
-    .str.replace(r"\s+", " ", regex=True)
-    .str.strip()
-)
+    if not os.path.exists(FILE_PATH):
 
+        st.error(
+            f"Excel fayl topilmadi:\n\n{FILE_PATH}"
+        )
 
-# =========================================================
-# 5. USTUNLARNI STANDART NOMLARGA O'ZGARTIRISH
-# =========================================================
+        st.stop()
 
-column_map = {
-    "Sana": "Date",
-    "AQSH dollari (840)": "USD",
-    "EVRO (978)": "EUR"
-}
-
-df = df.rename(columns=column_map)
-
-
-required_columns = [
-    "Date",
-    "USD",
-    "EUR"
-]
-
-missing = [
-    col for col in required_columns
-    if col not in df.columns
-]
-
-if missing:
-
-    st.error(
-        f"Excel faylda quyidagi ustunlar topilmadi: {missing}"
+    df = pd.read_excel(
+        FILE_PATH
     )
 
-    st.write(
-        "Topilgan ustunlar:",
-        df.columns.tolist()
+    # -----------------------------------------------------
+    # Normalize column names
+    # -----------------------------------------------------
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.replace(
+            "\u00a0",
+            " ",
+            regex=False
+        )
+        .str.replace(
+            r"\s+",
+            " ",
+            regex=True
+        )
+        .str.strip()
     )
 
-    st.stop()
+    # -----------------------------------------------------
+    # Rename columns
+    # -----------------------------------------------------
+    column_map = {}
 
+    for col in df.columns:
 
-# =========================================================
-# 6. DATA TAYYORLASH
-# =========================================================
+        clean = (
+            str(col)
+            .replace(
+                "\u00a0",
+                " "
+            )
+            .strip()
+        )
 
-df["Date"] = pd.to_datetime(
-    df["Date"],
-    errors="coerce"
-)
+        if clean == "Sana":
 
-df["USD"] = pd.to_numeric(
-    df["USD"],
-    errors="coerce"
-)
+            column_map[col] = "Date"
 
-df["EUR"] = pd.to_numeric(
-    df["EUR"],
-    errors="coerce"
-)
+        elif "AQSH dollari" in clean:
 
-df = df.dropna(
-    subset=[
+            column_map[col] = "USD"
+
+        elif "EVRO" in clean:
+
+            column_map[col] = "EUR"
+
+    df = df.rename(
+        columns=column_map
+    )
+
+    # -----------------------------------------------------
+    # Check columns
+    # -----------------------------------------------------
+    required_columns = [
         "Date",
         "USD",
         "EUR"
     ]
-)
 
-df = df.sort_values(
-    "Date"
-).reset_index(drop=True)
+    missing = [
+        col
+        for col in required_columns
+        if col not in df.columns
+    ]
+
+    if missing:
+
+        st.error(
+            "Excel faylda quyidagi ustunlar topilmadi: "
+            + ", ".join(missing)
+        )
+
+        st.stop()
+
+    # -----------------------------------------------------
+    # Convert types
+    # -----------------------------------------------------
+    df["Date"] = pd.to_datetime(
+        df["Date"],
+        errors="coerce"
+    )
+
+    df["USD"] = pd.to_numeric(
+        df["USD"],
+        errors="coerce"
+    )
+
+    df["EUR"] = pd.to_numeric(
+        df["EUR"],
+        errors="coerce"
+    )
+
+    # -----------------------------------------------------
+    # Remove invalid rows
+    # -----------------------------------------------------
+    df = df.dropna(
+        subset=["Date"]
+    )
+
+    df = df.sort_values(
+        "Date"
+    ).reset_index(
+        drop=True
+    )
+
+    return df
+
+
+data = load_data()
 
 
 # =========================================================
-# 7. SIDEBAR
+# DATA RANGE
 # =========================================================
+min_data_date = data["Date"].min().date()
+max_data_date = data["Date"].max().date()
 
+
+# =========================================================
+# SIDEBAR
+# =========================================================
 with st.sidebar:
 
     st.markdown(
-        "## 💱 VALYUTA"
-    )
-
-    st.markdown(
-        "### Risk Dashboard"
+        "## 💱 Valyuta Risk Dashboard"
     )
 
     st.markdown("---")
 
+    # =====================================================
+    # CURRENCY
+    # =====================================================
+    currency_choice = st.selectbox(
+        "Valyuta",
+        [
+            "USD + EUR",
+            "Faqat USD",
+            "Faqat EUR"
+        ]
+    )
+
+    st.markdown("---")
+
+    # =====================================================
+    # DATE RANGE
+    # =====================================================
     st.markdown(
-        "### 📅 Tahlil davri"
+        "### 📅 Sana oralig‘i"
     )
 
     start_date = st.date_input(
         "Boshlanish sanasi",
-        value=df["Date"].min().date()
+        value=min_data_date,
+        min_value=min_data_date,
+        max_value=max_data_date,
+        format="DD.MM.YYYY"
     )
 
     end_date = st.date_input(
         "Tugash sanasi",
-        value=df["Date"].max().date()
+        value=max_data_date,
+        min_value=min_data_date,
+        max_value=max_data_date,
+        format="DD.MM.YYYY"
     )
 
+    # =====================================================
+    # VALIDATE DATES
+    # =====================================================
+    if start_date > end_date:
+
+        st.error(
+            "Boshlanish sanasi tugash sanasidan "
+            "katta bo‘lishi mumkin emas."
+        )
+
+        st.stop()
+
+    # =====================================================
+    # INFORMATION
+    # =====================================================
     st.markdown("---")
 
     st.markdown(
-        "### 📊 Ma'lumot"
+        "### 📊 Tanlangan davr"
     )
 
     st.write(
-        f"Qatorlar: **{len(df):,}**"
+        f"**{start_date.strftime('%d.%m.%Y')}**"
     )
 
     st.write(
-        f"Boshlanish: **{df['Date'].min().strftime('%d.%m.%Y')}**"
+        f"dan"
     )
 
     st.write(
-        f"Tugash: **{df['Date'].max().strftime('%d.%m.%Y')}**"
+        f"**{end_date.strftime('%d.%m.%Y')}**"
+    )
+
+    # =====================================================
+    # AVAILABLE EXCEL RANGE
+    # =====================================================
+    st.markdown("---")
+
+    st.caption(
+        "Excel ma'lumotlari:"
+    )
+
+    st.caption(
+        f"{min_data_date.strftime('%d.%m.%Y')}"
+        f" — "
+        f"{max_data_date.strftime('%d.%m.%Y')}"
+    )
+
+    st.caption(
+        f"Jami: {len(data):,} ta yozuv"
     )
 
 
 # =========================================================
-# 8. SANA TEKSHIRISH
+# SELECTED PERIOD DATA
 # =========================================================
-
-if start_date > end_date:
-
-    st.error(
-        "Boshlanish sanasi tugash sanasidan katta bo'lishi mumkin emas."
-    )
-
-    st.stop()
-
-
-filtered = df[
-    (df["Date"].dt.date >= start_date)
+selected_data = data[
+    (data["Date"].dt.date >= start_date)
     &
-    (df["Date"].dt.date <= end_date)
+    (data["Date"].dt.date <= end_date)
 ].copy()
 
 
-if filtered.empty:
-
-    st.warning(
-        "Tanlangan davr bo'yicha ma'lumot topilmadi."
-    )
-
-    st.stop()
-
-
 # =========================================================
-# 9. HEADER
+# HEADER
 # =========================================================
-
 st.markdown(
-    '<div class="main-title">💱 VALYUTA RISK DASHBOARD</div>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<div class="subtitle">'
-    f"USD va EUR kurslari dinamikasi • "
-    f"{start_date.strftime('%d.%m.%Y')} — "
-    f"{end_date.strftime('%d.%m.%Y')}"
+    '<div class="main-title">'
+    '💱 Valyuta Risk Dashboard'
     '</div>',
     unsafe_allow_html=True
 )
 
-
-# =========================================================
-# 10. USD HISOBLASH
-# =========================================================
-
-usd_start = filtered["USD"].iloc[0]
-usd_end = filtered["USD"].iloc[-1]
-
-usd_change = (
-    usd_end / usd_start - 1
-) * 100
-
-usd_max = filtered["USD"].max()
-usd_min = filtered["USD"].min()
-
-usd_max_date = filtered.loc[
-    filtered["USD"].idxmax(),
-    "Date"
-]
-
-usd_min_date = filtered.loc[
-    filtered["USD"].idxmin(),
-    "Date"
-]
-
-
-# =========================================================
-# 11. EUR HISOBLASH
-# =========================================================
-
-eur_start = filtered["EUR"].iloc[0]
-eur_end = filtered["EUR"].iloc[-1]
-
-eur_change = (
-    eur_end / eur_start - 1
-) * 100
-
-eur_max = filtered["EUR"].max()
-eur_min = filtered["EUR"].min()
-
-eur_max_date = filtered.loc[
-    filtered["EUR"].idxmax(),
-    "Date"
-]
-
-eur_min_date = filtered.loc[
-    filtered["EUR"].idxmin(),
-    "Date"
-]
-
-
-# =========================================================
-# 12. USD HEADER
-# =========================================================
-
 st.markdown(
-    '<div class="section-title">🇺🇸 USD / UZS</div>',
+    """
+    <div class="sub-title">
+    USD va EUR kurslari bo‘yicha tarixiy tahlil,
+    tanlangan sana oralig‘i va yillik taqqoslash
+    </div>
+    """,
     unsafe_allow_html=True
 )
 
 
-c1, c2, c3, c4 = st.columns(4)
+# =========================================================
+# SELECTED PERIOD INFO
+# =========================================================
+if selected_data.empty:
 
-
-with c1:
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Boshlang'ich kurs</div>
-            <div class="kpi-value">{usd_start:,.2f}</div>
-            <div class="kpi-small">
-                {start_date.strftime('%d.%m.%Y')}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.warning(
+        "Tanlangan sana oralig‘ida ma'lumot mavjud emas."
     )
 
+else:
 
-with c2:
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Oxirgi kurs</div>
-            <div class="kpi-value">{usd_end:,.2f}</div>
-            <div class="kpi-small">
-                {end_date.strftime('%d.%m.%Y')}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.info(
+        f"📅 Tanlangan davr: "
+        f"**{start_date.strftime('%d.%m.%Y')}**"
+        f" → "
+        f"**{end_date.strftime('%d.%m.%Y')}**"
+        f" | "
+        f"Ma'lumotlar soni: "
+        f"**{len(selected_data):,}**"
     )
-
-
-with c3:
-
-    change_class = (
-        "positive"
-        if usd_change >= 0
-        else "negative"
-    )
-
-    arrow = "▲" if usd_change >= 0 else "▼"
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Umumiy o'zgarish</div>
-            <div class="kpi-value {change_class}">
-                {arrow} {usd_change:.2f}%
-            </div>
-            <div class="kpi-small">
-                Davr bo'yicha
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-with c4:
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Maksimum / Minimum</div>
-            <div class="kpi-value">
-                {usd_max:,.0f}
-            </div>
-            <div class="kpi-small">
-                Min: {usd_min:,.0f}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-st.caption(
-    f"📌 Maksimum: {usd_max:,.2f} "
-    f"({usd_max_date.strftime('%d.%m.%Y')})  •  "
-    f"Minimum: {usd_min:,.2f} "
-    f"({usd_min_date.strftime('%d.%m.%Y')})"
-)
 
 
 # =========================================================
-# 13. USD GRAFIK
+# CURRENCY DASHBOARD FUNCTION
 # =========================================================
+def show_currency_dashboard(
+    df,
+    currency,
+    currency_name
+):
 
-fig_usd = go.Figure()
+    if df.empty:
 
-
-fig_usd.add_trace(
-    go.Scatter(
-        x=filtered["Date"],
-        y=filtered["USD"],
-        mode="lines+markers",
-        name="USD / UZS",
-
-        line=dict(
-            color="#2563EB",
-            width=3,
-            shape="spline",
-            smoothing=1.1
-        ),
-
-        marker=dict(
-            size=5,
-            color="#2563EB",
-            line=dict(
-                width=1,
-                color="white"
-            )
-        ),
-
-        hovertemplate=
-        "<b>%{x|%d.%m.%Y}</b><br>"
-        "USD: %{y:,.2f}<extra></extra>"
-    )
-)
-
-
-fig_usd.update_layout(
-
-    height=470,
-
-    margin=dict(
-        l=20,
-        r=20,
-        t=25,
-        b=20
-    ),
-
-    plot_bgcolor="white",
-    paper_bgcolor="white",
-
-    hovermode="x unified",
-
-    xaxis=dict(
-        title="",
-        showgrid=False,
-        showline=True,
-        linecolor="#d1d5db",
-        tickfont=dict(
-            color="#6b7280"
+        st.warning(
+            f"{currency_name} bo‘yicha "
+            "tanlangan davrda ma'lumot yo‘q."
         )
-    ),
 
-    yaxis=dict(
-        title="UZS",
-        showgrid=True,
-        gridcolor="#eef1f5",
-        zeroline=False,
-        tickfont=dict(
-            color="#6b7280"
+        return
+
+    # =====================================================
+    # CALCULATIONS
+    # =====================================================
+    start_value = df[currency].iloc[0]
+
+    end_value = df[currency].iloc[-1]
+
+    if start_value != 0:
+
+        change = (
+            (end_value - start_value)
+            / start_value
+            * 100
         )
-    ),
 
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    )
-)
+    else:
 
+        change = 0
 
-st.plotly_chart(
-    fig_usd,
-    use_container_width=True
-)
+    min_value = df[currency].min()
 
+    max_value = df[currency].max()
 
-# =========================================================
-# 14. EUR HEADER
-# =========================================================
-
-st.markdown(
-    '<div class="section-title">🇪🇺 EUR / UZS</div>',
-    unsafe_allow_html=True
-)
-
-
-c1, c2, c3, c4 = st.columns(4)
-
-
-with c1:
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Boshlang'ich kurs</div>
-            <div class="kpi-value">{eur_start:,.2f}</div>
-            <div class="kpi-small">
-                {start_date.strftime('%d.%m.%Y')}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-with c2:
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Oxirgi kurs</div>
-            <div class="kpi-value">{eur_end:,.2f}</div>
-            <div class="kpi-small">
-                {end_date.strftime('%d.%m.%Y')}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-with c3:
-
-    change_class = (
-        "positive"
-        if eur_change >= 0
-        else "negative"
-    )
-
-    arrow = "▲" if eur_change >= 0 else "▼"
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Umumiy o'zgarish</div>
-            <div class="kpi-value {change_class}">
-                {arrow} {eur_change:.2f}%
-            </div>
-            <div class="kpi-small">
-                Davr bo'yicha
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-with c4:
-
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-title">Maksimum / Minimum</div>
-            <div class="kpi-value">
-                {eur_max:,.0f}
-            </div>
-            <div class="kpi-small">
-                Min: {eur_min:,.0f}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-st.caption(
-    f"📌 Maksimum: {eur_max:,.2f} "
-    f"({eur_max_date.strftime('%d.%m.%Y')})  •  "
-    f"Minimum: {eur_min:,.2f} "
-    f"({eur_min_date.strftime('%d.%m.%Y')})"
-)
-
-
-# =========================================================
-# 15. EUR GRAFIK
-# =========================================================
-
-fig_eur = go.Figure()
-
-
-fig_eur.add_trace(
-    go.Scatter(
-        x=filtered["Date"],
-        y=filtered["EUR"],
-        mode="lines+markers",
-        name="EUR / UZS",
-
-        line=dict(
-            color="#7C3AED",
-            width=3,
-            shape="spline",
-            smoothing=1.1
-        ),
-
-        marker=dict(
-            size=5,
-            color="#7C3AED",
-            line=dict(
-                width=1,
-                color="white"
-            )
-        ),
-
-        hovertemplate=
-        "<b>%{x|%d.%m.%Y}</b><br>"
-        "EUR: %{y:,.2f}<extra></extra>"
-    )
-)
-
-
-fig_eur.update_layout(
-
-    height=470,
-
-    margin=dict(
-        l=20,
-        r=20,
-        t=25,
-        b=20
-    ),
-
-    plot_bgcolor="white",
-    paper_bgcolor="white",
-
-    hovermode="x unified",
-
-    xaxis=dict(
-        title="",
-        showgrid=False,
-        showline=True,
-        linecolor="#d1d5db",
-        tickfont=dict(
-            color="#6b7280"
-        )
-    ),
-
-    yaxis=dict(
-        title="UZS",
-        showgrid=True,
-        gridcolor="#eef1f5",
-        zeroline=False,
-        tickfont=dict(
-            color="#6b7280"
-        )
-    ),
-
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    )
-)
-
-
-st.plotly_chart(
-    fig_eur,
-    use_container_width=True
-)
-
-
-# =========================================================
-# 16. DATA JADVAL
-# =========================================================
-
-with st.expander("📊 Batafsil ma'lumotlarni ko'rish"):
-
-    display_df = filtered.copy()
-
-    display_df["Date"] = display_df[
+    min_date = df.loc[
+        df[currency].idxmin(),
         "Date"
-    ].dt.strftime("%d.%m.%Y")
+    ]
 
-    display_df = display_df.rename(
+    max_date = df.loc[
+        df[currency].idxmax(),
+        "Date"
+    ]
+
+    # =====================================================
+    # SECTION
+    # =====================================================
+    st.markdown(
+        f'<div class="section-title">'
+        f'{currency_name}'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # =====================================================
+    # KPI
+    # =====================================================
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+
+        st.metric(
+            "Boshlang‘ich kurs",
+            f"{start_value:,.2f}"
+        )
+
+    with col2:
+
+        st.metric(
+            "Oxirgi kurs",
+            f"{end_value:,.2f}"
+        )
+
+    with col3:
+
+        st.metric(
+            "O‘zgarish",
+            f"{change:+.2f}%"
+        )
+
+    with col4:
+
+        st.metric(
+            "Minimum",
+            f"{min_value:,.2f}",
+            help=(
+                "Sana: "
+                + min_date.strftime("%d.%m.%Y")
+            )
+        )
+
+    with col5:
+
+        st.metric(
+            "Maksimum",
+            f"{max_value:,.2f}",
+            help=(
+                "Sana: "
+                + max_date.strftime("%d.%m.%Y")
+            )
+        )
+
+    # =====================================================
+    # CHART
+    # =====================================================
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+
+            x=df["Date"],
+
+            y=df[currency],
+
+            mode="lines+markers",
+
+            name=currency_name,
+
+            # Smooth winding line
+            line=dict(
+                width=4,
+                shape="spline",
+                smoothing=1.3
+            ),
+
+            marker=dict(
+                size=6
+            ),
+
+            hovertemplate=(
+                "%{x|%d.%m.%Y}"
+                "<br>"
+                "Kurs: %{y:,.2f}"
+                "<extra></extra>"
+            )
+        )
+    )
+
+    fig.update_layout(
+
+        title=(
+            f"{currency_name}"
+            f" | "
+            f"{start_date.strftime('%d.%m.%Y')}"
+            f" — "
+            f"{end_date.strftime('%d.%m.%Y')}"
+        ),
+
+        height=500,
+
+        template="plotly_white",
+
+        hovermode="x unified",
+
+        margin=dict(
+            l=20,
+            r=20,
+            t=60,
+            b=20
+        ),
+
+        xaxis=dict(
+            title="Sana",
+            showgrid=True
+        ),
+
+        yaxis=dict(
+            title="UZS",
+            tickformat=","
+        ),
+
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    # =====================================================
+    # TABLE
+    # =====================================================
+    with st.expander(
+        f"📋 {currency_name} ma'lumotlari"
+    ):
+
+        table = df[
+            ["Date", currency]
+        ].copy()
+
+        table["Date"] = table[
+            "Date"
+        ].dt.strftime(
+            "%d.%m.%Y"
+        )
+
+        table.columns = [
+            "Sana",
+            "Kurs"
+        ]
+
+        table["Kurs"] = table[
+            "Kurs"
+        ].map(
+            lambda x: f"{x:,.2f}"
+        )
+
+        st.dataframe(
+            table,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# =========================================================
+# SHOW SELECTED CURRENCY
+# =========================================================
+if currency_choice == "USD + EUR":
+
+    show_currency_dashboard(
+        selected_data,
+        "USD",
+        "🇺🇸 AQSH dollari (USD)"
+    )
+
+    show_currency_dashboard(
+        selected_data,
+        "EUR",
+        "🇪🇺 Yevro (EUR)"
+    )
+
+elif currency_choice == "Faqat USD":
+
+    show_currency_dashboard(
+        selected_data,
+        "USD",
+        "🇺🇸 AQSH dollari (USD)"
+    )
+
+elif currency_choice == "Faqat EUR":
+
+    show_currency_dashboard(
+        selected_data,
+        "EUR",
+        "🇪🇺 Yevro (EUR)"
+    )
+
+
+# =========================================================
+# FULL YEAR DATA
+# IMPORTANT:
+# This section does NOT depend on selected date range.
+# =========================================================
+data_2025 = data[
+    data["Date"].dt.year == 2025
+].copy()
+
+data_2026 = data[
+    data["Date"].dt.year == 2026
+].copy()
+
+
+# =========================================================
+# MONTHLY COMPARISON DATA
+# =========================================================
+def prepare_comparison_data(
+    df,
+    currency
+):
+
+    if df.empty:
+
+        return pd.DataFrame(
+            columns=[
+                "Month",
+                "Value"
+            ]
+        )
+
+    temp = df.copy()
+
+    temp["Month"] = (
+        temp["Date"].dt.month
+    )
+
+    temp = temp.sort_values(
+        "Date"
+    )
+
+    # Har oyning oxirgi mavjud kursi
+    monthly = (
+        temp
+        .groupby(
+            "Month",
+            as_index=False
+        )
+        .last()
+    )
+
+    monthly = monthly[
+        [
+            "Month",
+            currency
+        ]
+    ]
+
+    monthly = monthly.rename(
         columns={
-            "Date": "Sana",
-            "USD": "USD / UZS",
-            "EUR": "EUR / UZS"
+            currency: "Value"
         }
     )
 
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True
+    return monthly
+
+
+# =========================================================
+# YEAR COMPARISON CHART
+# =========================================================
+def show_year_comparison_chart(
+    data_2025,
+    data_2026,
+    currency,
+    currency_name
+):
+
+    monthly_2025 = (
+        prepare_comparison_data(
+            data_2025,
+            currency
+        )
     )
+
+    monthly_2026 = (
+        prepare_comparison_data(
+            data_2026,
+            currency
+        )
+    )
+
+    month_labels = {
+
+        1: "Yan",
+        2: "Fev",
+        3: "Mar",
+        4: "Apr",
+        5: "May",
+        6: "Iyun",
+        7: "Iyul",
+        8: "Avg",
+        9: "Sen",
+        10: "Okt",
+        11: "Noy",
+        12: "Dek"
+    }
+
+    all_month_labels = [
+        month_labels[m]
+        for m in range(1, 13)
+    ]
+
+    fig = go.Figure()
+
+    # =====================================================
+    # 2025
+    # =====================================================
+    if not monthly_2025.empty:
+
+        fig.add_trace(
+            go.Scatter(
+
+                x=[
+                    month_labels[m]
+                    for m in monthly_2025["Month"]
+                ],
+
+                y=monthly_2025["Value"],
+
+                mode="lines+markers",
+
+                name="2025",
+
+                line=dict(
+                    width=4,
+                    shape="spline",
+                    smoothing=1.3
+                ),
+
+                marker=dict(
+                    size=7
+                ),
+
+                hovertemplate=(
+                    "2025"
+                    "<br>"
+                    "Oy: %{x}"
+                    "<br>"
+                    "Kurs: %{y:,.2f}"
+                    "<extra></extra>"
+                )
+            )
+        )
+
+    # =====================================================
+    # 2026
+    # =====================================================
+    if not monthly_2026.empty:
+
+        fig.add_trace(
+            go.Scatter(
+
+                x=[
+                    month_labels[m]
+                    for m in monthly_2026["Month"]
+                ],
+
+                y=monthly_2026["Value"],
+
+                mode="lines+markers",
+
+                name="2026",
+
+                line=dict(
+                    width=4,
+                    shape="spline",
+                    smoothing=1.3
+                ),
+
+                marker=dict(
+                    size=7
+                ),
+
+                connectgaps=False,
+
+                hovertemplate=(
+                    "2026"
+                    "<br>"
+                    "Oy: %{x}"
+                    "<br>"
+                    "Kurs: %{y:,.2f}"
+                    "<extra></extra>"
+                )
+            )
+        )
+
+    # =====================================================
+    # LAYOUT
+    # =====================================================
+    fig.update_layout(
+
+        title=(
+            f"{currency_name}"
+            f" — 2025 vs 2026"
+        ),
+
+        height=500,
+
+        template="plotly_white",
+
+        hovermode="x unified",
+
+        margin=dict(
+            l=20,
+            r=20,
+            t=60,
+            b=20
+        ),
+
+        xaxis=dict(
+
+            title="Oy",
+
+            categoryorder="array",
+
+            categoryarray=all_month_labels,
+
+            range=[
+                -0.2,
+                11.2
+            ]
+        ),
+
+        yaxis=dict(
+            title="UZS",
+            tickformat=","
+        ),
+
+        legend=dict(
+
+            orientation="h",
+
+            yanchor="bottom",
+            y=1.02,
+
+            xanchor="right",
+            x=1
+        )
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+
+# =========================================================
+# YEAR COMPARISON TABLE
+# =========================================================
+def show_comparison_table(
+    data_2025,
+    data_2026,
+    currency,
+    currency_name
+):
+
+    monthly_2025 = (
+        prepare_comparison_data(
+            data_2025,
+            currency
+        )
+    )
+
+    monthly_2026 = (
+        prepare_comparison_data(
+            data_2026,
+            currency
+        )
+    )
+
+    month_labels = {
+
+        1: "Yanvar",
+        2: "Fevral",
+        3: "Mart",
+        4: "Aprel",
+        5: "May",
+        6: "Iyun",
+        7: "Iyul",
+        8: "Avgust",
+        9: "Sentabr",
+        10: "Oktabr",
+        11: "Noyabr",
+        12: "Dekabr"
+    }
+
+    comparison = pd.DataFrame({
+        "Oy": list(
+            month_labels.values()
+        )
+    })
+
+    # =====================================================
+    # 2025
+    # =====================================================
+    if not monthly_2025.empty:
+
+        temp_2025 = monthly_2025.copy()
+
+        temp_2025["Oy"] = temp_2025[
+            "Month"
+        ].map(
+            month_labels
+        )
+
+        temp_2025 = temp_2025[
+            ["Oy", "Value"]
+        ]
+
+        temp_2025 = temp_2025.rename(
+            columns={
+                "Value": "2025"
+            }
+        )
+
+        comparison = comparison.merge(
+            temp_2025,
+            on="Oy",
+            how="left"
+        )
+
+    else:
+
+        comparison["2025"] = None
+
+    # =====================================================
+    # 2026
+    # =====================================================
+    if not monthly_2026.empty:
+
+        temp_2026 = monthly_2026.copy()
+
+        temp_2026["Oy"] = temp_2026[
+            "Month"
+        ].map(
+            month_labels
+        )
+
+        temp_2026 = temp_2026[
+            ["Oy", "Value"]
+        ]
+
+        temp_2026 = temp_2026.rename(
+            columns={
+                "Value": "2026"
+            }
+        )
+
+        comparison = comparison.merge(
+            temp_2026,
+            on="Oy",
+            how="left"
+        )
+
+    else:
+
+        comparison["2026"] = None
+
+    # =====================================================
+    # Format values
+    # =====================================================
+    comparison["2025"] = comparison[
+        "2025"
+    ].apply(
+        lambda x:
+        f"{x:,.2f}"
+        if pd.notna(x)
+        else "—"
+    )
+
+    comparison["2026"] = comparison[
+        "2026"
+    ].apply(
+        lambda x:
+        f"{x:,.2f}"
+        if pd.notna(x)
+        else "—"
+    )
+
+    # =====================================================
+    # SHOW TABLE
+    # =====================================================
+    with st.expander(
+        f"📋 {currency_name}"
+        f" — oylik taqqoslash jadvali"
+    ):
+
+        st.dataframe(
+            comparison,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# =========================================================
+# YEAR COMPARISON SECTION
+# =========================================================
+st.markdown("---")
+
+st.markdown(
+    '<div class="section-title">'
+    '📊 2025 vs 2026 — Yillik taqqoslash'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.info(
+    "Bu bo‘lim tanlangan sana oralig‘iga "
+    "bog‘liq emas. 2025 va 2026 yillarning "
+    "mavjud ma'lumotlari to‘liq taqqoslanadi. "
+    "Ma'lumot mavjud bo‘lmagan oylar bo‘sh qoladi."
+)
+
+
+# =========================================================
+# USD COMPARISON
+# =========================================================
+if currency_choice in [
+    "USD + EUR",
+    "Faqat USD"
+]:
+
+    show_year_comparison_chart(
+        data_2025,
+        data_2026,
+        "USD",
+        "🇺🇸 AQSH dollari (USD)"
+    )
+
+    show_comparison_table(
+        data_2025,
+        data_2026,
+        "USD",
+        "🇺🇸 AQSH dollari (USD)"
+    )
+
+
+# =========================================================
+# EUR COMPARISON
+# =========================================================
+if currency_choice in [
+    "USD + EUR",
+    "Faqat EUR"
+]:
+
+    show_year_comparison_chart(
+        data_2025,
+        data_2026,
+        "EUR",
+        "🇪🇺 Yevro (EUR)"
+    )
+
+    show_comparison_table(
+        data_2025,
+        data_2026,
+        "EUR",
+        "🇪🇺 Yevro (EUR)"
+    )
+
+
+# =========================================================
+# FOOTER
+# =========================================================
+st.markdown("---")
+
+st.caption(
+    "Valyuta Risk Dashboard • "
+    "Excel ma'lumotlari asosida"
+)
